@@ -1,0 +1,534 @@
+---
+title: 'Práctica 2: Limpieza y análisis de datos'
+author: "Daniel Cabello Vázquez"
+date: "Enero 2020"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  html_document:
+    highlight: default
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Descripción del dataset. ¿Por qué es importante y qué pregunta/problema pretende responder?
+
+
+## 1.1 Objetivo
+
+A partir de información de la estación meteorológica del aeropuerto de Barajas se nos plantea las siguientes cuestiones:
+
+ * ¿Qué factores climatológicos influyen más sobre la visibilidad y en qué sentido lo hace? Esta variable tiene gran importancia a la hora de regular el tráfico aéreo del aropuerto de Barajas.
+ 
+ * ¿Se ha producido un cambio estadísticamente significativo en la temperatura media de los últimos 5 años repecto al del periodo 1997-2001?
+ 
+ * ¿Cuál ha sido la tendencia en la temperatura media, máxima y mínima anual y estacional para el periodo comprendido entre 1997 y 2015?
+ 
+ 
+
+## 1.2 Descripción del Dataset
+
+Datos climatológicos diarios de la estación meteorológica del aeropuerto de Barajas recogidos entre 1997 y 2015. Comprende 23 variables y 6812 observaciones. 
+
+El conjunto de datos fue descargado de la web de Kaggle: https://www.kaggle.com/juliansimon/weather_madrid_lemd_1997_2015.csv
+Gathered web https://www.wunderground.com/ The Weather Company, LLC
+
+Las variables son las siguientes:
+
+* CET: Fecha de la observación meteorológica en formato de año-mes-día.
+* Max TemperatureC: Temperatura máxima del aire registrada durante el día indicado, en grados Celsius.
+* Mean TemperatureC: Temperatura media del aire registrada durante el día indicado, en grados Celsius.
+* Min TemperatureC: Temperatura mínima del aire registrada durante el día indicado, en grados Celsius.
+* Dew PointC: Punto de rocío, temperatura a la que empieza a condensarse el vapor de agua contenido en el aire. en grados Celsius.
+* MeanDew PointC: Promedio del Punto de rocio, en grados celsius.
+* Min DewpointC: Punto de rocío mínimo, en grados celsius.
+* Max Humidity: Humedad relativa máxima durante el día indicado, en porcentaje.
+* Mean Humidity: Humedad relativa media durante el día indicado, en porcentaje.
+* Min Humidity: Humedad relativa mínima durante el día indicado, en porcentaje.
+* Max Sea Level PressurehPa: Presión atmosférica máxima durante el día indicado a nivel de mar, en hPa.
+* Mean Sea Level PressurehPa: Presión atmosférica media durante el día indicado al nivel de mar, en hPa.
+* Min Sea Level PressurehPa: Presión atmosférica mínima durante el día indicado al nivel de mar, en hPa.
+* Max VisibilityKm: Visibilidad máxima durante el día indicado, en km.
+* Mean VisibilityKm: visibilidad media durante el día indicado, en Km.
+* Min VisibilitykM: visibilidad mínimz durante el día indicado, en Km.
+* Max Wind SpeedKm/h: velocidad máxima del viento, en  Km/hora.
+* Mean Wind SpeedKm/h: velocidad media del viento, en  Km/hora.
+* Max Gust SpeedKm/h: velocidad máxima de razhas, en  Km/hora.
+* Precipitationmm: Precipitación acumulada durante el día indicado, en mm.
+* CloudCover: Nubosidad.
+* Events: enetos meteorológico durante el día indicado.
+* WindDirDegrees: Dirección del viento, en grado.
+
+
+# 2. Integración y selección de los datos de interés a analizar.
+
+Se cargan de datos del archivo csv en un dataframe (data_weather)
+
+```{r}
+# Carga de datos
+data_weather <- read.csv("DATA/weather_madrid_1997_2015.csv")
+
+# Se visualizan los primeros registros
+head(data_weather)
+```
+
+Se revisa si los Tipos de datos asignados a cada variable es la adecuada:
+
+```{r}
+sapply(data_weather,function(x) class(x))
+```
+
+Los tipos de datos de algunas variables no son las adecuados, por lo que se cambiarán para facilitar los análisis posteriores. 
+
+* El tipo de dato del campo 'CET' es 'factor', pero interesa que sea tratado como fecha con el formato "año/mes/día". 
+* Las variables relacionadas con temperatura se los trata como integer pero le asignaremos el tipo numérico para poder trabajar con decimales.
+
+```{r}
+data_weather$CET <- as.Date.factor(data_weather$CET, "%Y-%m-%d")
+
+data_weather[,2:7] <- apply(data_weather[,2:7],2, function(x) as.numeric(x))
+
+
+class(data_weather$CET)
+```
+
+
+
+# 3. Limpieza de los datos.
+
+## 3.1 ¿Los datos contienen ceros o elementos vacíos? ¿Cómo gestionarías cada uno de estos casos?
+
+En el dataset, en ningún caso, los ceros indican ausencia de valores sino que es en sí mismo un valor cuantitativo de la variable(temperatura, percipitación, punto de rocío...). Los valores nulos aparecen en blanco, sin dato alguno, identificándose y asignándose como 'NA' durante la carga del dataset.
+
+Por otra parte, en el campo 'Precipitationmm' se han detectado anomalías en los valores de precipitación, haciéndolos poco fiables e invalidando su uso para los análisis. Normalmente el cero indicaría ausencia de precipitación, pero se ha evidenciado que existen largos periodos sin precipitación a pesar de que se producen eventos de lluvía (según el campo 'Events'). Por tanto, este campo será eliminada del dataset.
+
+A continuación, se contabilizan el nº de nulos existentes en cada campos:
+```{r}
+sapply(data_weather, function(x) sum(is.na(x)))
+```
+
+Los campos con más valores nulos se eliminarán del dataset: los campos de visibilidad máxima y mínima con 940 registros vacíos, la nubosidad (cloudcover) con 1.372 registros vacíos y la velocidad máxima de las rachas (Max.Gust.SpeedKm.h) con 3.306 registros vacíos. La opción de eliminar los registros con valores vacíos no es una opción porque invalidaría los análisis estadísticos de la serie histórica y estos campos no son esenciales para los objetivos planteados. No se elimina el campo de visibiliad media (Mean.VisibilityKm) ya que se utilizará para hacer el análisis de correlación para ver que variable climática tiene más influencia en la visibilidad.
+
+Se eliminan los campos:
+
+```{r message=FALSE, warning= FALSE}
+library(dplyr)
+
+# Eliminación de campos del dataset
+data_weather <- select(data_weather, -Max.VisibilityKm, -Min.VisibilitykM, -Max.Gust.SpeedKm.h, -CloudCover, -Precipitationmm)
+```
+
+Las variables relativas a la temperatura, punto de rocío y humedad presentan 2 ó 3 valores nulos cada uno. En estos casos se realiza una imputación de valores basada en los k vecinos más próximos (Knn - Imputation). Para esta imputación se utiliza la función KNN() del paquete VIM.
+
+```{r message=FALSE, warning= FALSE}
+library(VIM)
+
+# Imputación de valores
+data_weather$Max.TemperatureC <- kNN(data_weather)$Max.TemperatureC
+data_weather$Mean.TemperatureC <- kNN(data_weather)$Mean.TemperatureC
+data_weather$Min.TemperatureC <- kNN(data_weather)$Min.TemperatureC
+data_weather$Dew.PointC <- kNN(data_weather)$Dew.PointC
+data_weather$MeanDew.PointC <- kNN(data_weather)$MeanDew.PointC
+data_weather$Min.DewpointC <- kNN(data_weather)$Min.DewpointC
+data_weather$Max.Humidity <- kNN(data_weather)$Max.Humidity
+data_weather$Mean.Humidity <- kNN(data_weather)$Mean.Humidity
+data_weather$Min.Humidity <- kNN(data_weather)$Min.Humidity
+
+# Contabilización de valores nulo
+sapply(data_weather, function(x) sum(is.na(x)))
+```
+Ahora ya no hay valores nulos en ningún campo del dataset a excepción de 'Mean.VisibilityKm' por la razón comentada anteriormente.
+
+
+## 3.2 Identificación y tratamiento de valores extremos.
+
+Los valores mínimo y máximo y los cuartiles permiten ver en qué rango de valores se mueve cada variable, y, si estos, se encuentran dentro de lo aceptable para cada una de las variables. En los datos que se muestran abajo no se aprecia valores anómalos que se salga de lo posible. Las temperaturas, porcentajes de humedad, la presión del aire, la precipitación y la velocidad y dirección del viento se sitúan dentro del rango de lo aceptable.
+
+```{r}
+# Obtención de los cuartiles y el valor máximo y mínimo de las variables cuantitativas
+summary(data_weather[,c(-1,-16)])
+```
+
+Si se definen los valores extremos o atípicos (outliers) como aquellos valores que exceden 3 veces el rango intercuartílico (RIC) a partir del cuartil 1 (Q1) o del cuartil 3 (q3), es decir, caen fuera del intervalo Q1-3RIC - Q3+3RIC, entonces se tienen los siguientes valores extremos para cada campo:
+
+```{r}
+# Valores extremos de cada campo
+sapply(data_weather[,c(-1,-17)], function(x) boxplot.stats(x)$out[1:10])
+
+```
+
+Puesto que estos valores extremos se encuadran dentro del rango posible de valores de cada atributo, no es necesario hacer un tratamiento previo de los mismos. En todo caso, se pueden aplicar análisis estadísticos robustos para minimizar o evitar efectos indeseados de estos valores extremos sobre los estadísticos (de tendencia central, dispersión...) y de su propagación en pruebas estadísticas.
+
+El rango de valores y sus valores extremos se pueden representar de una forma más visual mediante diagramas de caja y bigotes (boxplot):
+
+```{r}
+
+boxplot(data_weather[,2:4])
+boxplot(data_weather[,5:7])
+boxplot(data_weather[,8:10])
+boxplot(data_weather[,11:13])
+boxplot(data_weather[,14])
+boxplot(data_weather[,15:16])
+```
+
+
+Una vez finalizada la carga, integración y limpieza de los datos se guarda el nuevo conjunto de datos en un nuevo archivo csv: 
+
+```{r}
+write.csv(data_weather, "DATA/weather_madrid_1997_2015_clean.csv")
+```
+
+
+# 4. Análisis de los datos y presentación de los resultados
+
+
+## 4.1 Selección de los grupos de datos que se quieren analizar/comparar (planificación de los análisis a aplicar).
+
+Carga de los datos limpios
+
+```{r}
+data_weather_clean <- data_weather
+```
+
+
+**Análisis 1**. Se compara si la temperatura media en el mes de enero en los primeros 5 años (1997-2001) del registro es significativamente mayor que la de los 5 últimos años (2011-2015). Se utilizará un test paramétrico de constraste de hipótesis para verificarlo. En la hipótesis nula no existe diferencia significativa en la temperatura media del mes de enero mientras que en la hipótesis alternativa si hay una diferencia significativa. Los datos a a seleccionar son los registros de temperatura media (Mean.TemperatureC) del mes de enero en los años 1999-2003 y 2011-2015.
+
+```{r}
+data_ch <-data_weather_clean %>%
+  select(CET, Mean.TemperatureC, Min.TemperatureC, Max.TemperatureC) %>%
+  filter((CET >= "1997-01-01" & CET <= "2001-12-31") | CET >= "2011-01-01")
+ 
+data_ch <- mutate(data_ch, grupo = if_else(CET >= "1997-01-01" & CET <= "2001-12-31",1, 2), 
+                  month = as.integer(format(CET, "%m")),
+                  year = as.integer(format(CET, "%Y")))
+```
+
+
+**Análisis 2**. Análisis de correlación entre las variables de visibilidad media y las demás variables climáticas cuantitativas para ver cual es la que más influye. Solo se seleccionarán aquellos registros o filas en los que no existan nulos en el campo 'Mean.Visibilitykm'.
+
+```{r}
+# Se elimina filas con nulos en el campo 'Mean.VisibilityKm'
+data_cor <- data_weather_clean[!is.na(data_weather_clean$Mean.VisibilityKm),]
+```
+
+
+
+**Análisis 3**. Análisis de tendencia de la temperatura media, mínima y máxima mensual
+
+Se extraen el año y el mes del campo fecha (CET) y se pone en dos nuevos campos (year, month), luego se agrupan los datos de temperatura por año y mes obteniendo la media mensual de cada año. En el dataset original no existen registros en los meses de marzo y abril del 2000 por lo que no se han podido detectar antes mediante la búsqueda de valores vacíos. Para solucionarlo, se ha optado por añadir los registros correspondientes a esas fechas imputando el valor promedio calculado a partir los valores de los dos anteriores y los dos posteriores de cada mes (marzo y abril).
+
+
+```{r}
+# Se agrupan los datos por año y mes calculando la media mensual
+data_month <- data_weather_clean %>%
+  mutate(month = as.integer(format(CET, "%m")), year = as.integer(format(CET, "%Y"))) %>%
+  group_by(year,month) %>%
+  summarise(Mean.Temp_C = round(mean(Mean.TemperatureC),2), 
+            Min.Temp_C = round(mean(Min.TemperatureC),2), 
+            Max.Temp_C = round(mean(Max.TemperatureC),2))
+
+# Se añaden los registros para febrero y marzo de 2000 no incluidos en el dataset original
+mar_2000 <- list(2000,3,10.71,5.10,16.83)
+apr_2000 <- list(2000,4,11.85,5.96,18.24)
+data_month <- rbind.data.frame(data_month, mar_2000, apr_2000)
+
+# Se reordenan las filas por año y mes
+data_month <- arrange(data_month, year, month)
+
+
+data_year <- data_month %>%
+  group_by(year) %>%
+  summarise(Mean.Temp_C = round(mean(Mean.Temp_C),2), 
+            Min.Temp_C = round(mean(Min.Temp_C),2), 
+            Max.Temp_C = round(mean(Max.Temp_C),2))
+
+data_year
+```
+
+
+## 4.2 Comprobación de la normalidad y homogeneidad de la varianza.
+
+
+### 4.2.1 Test de normalidad de Kolmogorov-Smirnov
+
+```{r}
+library(dplyr)
+library(nortest)
+data_n <- select(data_weather_clean, -CET, -Events)
+
+a <- sapply(data_n, function(x) if (lillie.test(x)$p.value < 0.01) {c(lillie.test(x)$p.value, "Normal")} else {c(lillie.test(x)$p.value, "No Normal")})
+a
+```
+Según la prueba de normalidad de Lilliefors todas las variables cuantitativas siguen una distribución normal, el pvalor de todas las variables es bastante inferior al nivel de significación fijado de 0,05.
+
+
+### 4.2.2 Homogeneidad de la varianza
+
+Se comprueba la homogeneidad de la varianza de la temperatura media, mínima y máxima (Mean.TemperatureC) para dos intervalos de tiempo de 5 años (1997-2001 y 2011-2015) sobre los que se va aplicar un constraste de hipótesis
+
+```{r}
+
+# Test de barlett
+bartlett.test(Mean.TemperatureC ~ grupo, data = data_ch)
+bartlett.test(Max.TemperatureC ~ grupo, data = data_ch)
+bartlett.test(Min.TemperatureC ~ grupo, data = data_ch)
+```
+
+La homocedasticidad o igualdad de varianzas se cumplen para la temperatura media y la máxima considerando un nivel de significación de 0.05, pero no para las temperaturas mínimas aunque tampoco se aleja mucho
+
+
+
+## 4.3 Aplicación de pruebas estadísticas para comparar los grupos de datos. 
+
+
+
+### 4.3.1 Análisis de correlación
+
+Nos interesa saber qué variables cuantitativas influyen más en la visibilidad media y si estas son significativas. Para cuantificarlo se hará un análisis de correlación utilizando el coeficiente de correlación de Pearson. Este coeficiciente se aplica a variables aleatorias cuantitativas continuas y es independiente de la escala de medida de las variables por lo que no hace falta normalizarlas. Hay que tener en cuenta que el coeficiente mide la correlación lineal entre dos variables y el hecho de que el coeficiente sea bajo solo refleja no linealidad entre las variables.
+
+```{r, warning=FALSE}
+library(dplyr)
+
+# Se seleccionan las variables cuantitativas
+data_cor <- select(data_cor, -CET, -Events)
+
+# Se crea una matriz vacía donde se guardaran los resultados
+corr_matrix <- matrix(nc = 2, nr = 0)
+colnames(corr_matrix) <- c("estimate", "p-value")
+
+# Se realiza el análisis de correlación entre las humedad relativa media y el resto de variables
+for (i in 1:(ncol(data_cor)-1)) {
+  t_test <- cor.test(data_cor[,i],data_cor[,"Mean.VisibilityKm"], method = "pearson")
+  corr_coef = t_test$estimate
+  p_val = t_test$p.value
+
+  pair = matrix(ncol = 2, nrow = 1)
+  pair[1][1] = corr_coef
+  pair[2][1] = p_val
+  
+  corr_matrix <- rbind(corr_matrix,pair)
+  rownames(corr_matrix)[nrow(corr_matrix)] <- colnames(data_cor)[i]
+}
+
+# Se muestran los resultados del análisis de correlación
+corr_matrix
+
+
+```
+
+Los resultados muestran que las variables que más influyen en la visibiliad media son:
+
+* las variables que miden la humedad relativa del aire, cuanto mayor es la humedad menor es la visibilidad en km ya que es más probable que se produzca lluvia, llovizna, niebla o neblina, 
+
+* le siguen las variables de temperatura que muestran una correlación positiva con la visibilidad (cuanto mayor es la temperatura mayor es la visibilidad pues el aire puede contener una mayor cantidad de agua sin que esta condense), 
+
+* en tercer lugar se encuentra la temperatura de rocío mostrando una correlación negativa, pues cuando mayor es la temperatura a la que el vapor de agua empieza a condensar menor es la visibilidad del aire y, cuanto más baja, menor la probabilidad de que el vapor condense favorenciendo una mayor visibilidad.
+
+* La influencia de la velocidad media del viento es pequeña pero aun así significativa (p-value = 1.8368e-04), con el viento se mejora la visibiliad. Lo mismo se puede decir de la presión a nivel del mar, pero su relación es más indirecta influyendo en las condiciones climáticas asociados a anticiclones y borrascas.
+
+* Hay que tener en cuenta que en el análisis no se consideran otros factores importantes que no se recogen en el dataset como las partículas en supensión reduciendo la visibilidad (brua, calima) o la posición del sol. 
+
+
+Esta correlación se puede visualizar mediante un diagrama de dispersión y su recta de regresión lineal, en los siguiente gráficos se representa la visibilidad frente a la humedad relativa y la temperatura media. 
+
+```{r message=FALSE, warning= FALSE}
+library(ggplot2)
+library(gridExtra)
+
+d1 <- ggplot(data_cor, aes(x=Mean.Humidity, y=Mean.VisibilityKm)) + geom_point() + ggtitle("Mean.VisibilityKm - Mean.Humidity") + xlab("Humedad relativa (%)") + ylab("Visibilidad (km)") + geom_smooth(method=lm)
+
+d2 <- ggplot(data_cor, aes(x=Mean.TemperatureC, y=Mean.VisibilityKm)) + geom_point() + ggtitle("Mean.VisibilityKm - Mean.TemperatureC") + xlab("Temperatura media (ºC)") + ylab("Visibilidad (km)") + geom_smooth(method=lm)
+
+grid.arrange(d1, d2, nrow=1, ncol= 2)
+```
+
+
+### 4.3.2 Contraste de hipótesis
+
+Se quiere saber si la temperatura media anual y mensual del periodo 1997-2001 (1) es la misma que para el periodo 2011-2015 (2) o si, por el contrario, se ha producido un cambio significativo en las mismas.
+
+Para hacer la comparación se utiliza la prueba de t-Student, un test paramétrico de constraste de hipótesis que permite comprobar la igualdad de las medias de dos muestras que siguen una distribución normal. El test se aplica comparando tanto los dos periodos en su conjunto como cada mes de los dos periodos.
+
+El test trabaja con las siguientes hipótesis:
+
+* Hipótesis hula (h0): no existe diferencia significativa en la temperatura media 
+* Hipótesis alternativa (h1):  existe una diferencia significativa en la temperatura.
+
+
+1. Si se compara la temperatura media de los dos periodos tenemos el siguiente resultado:
+
+```{r, warning=FALSE}
+# test t-Student
+t.test(Mean.TemperatureC ~ grupo, data = data_ch)
+
+```
+
+El test rechaza la hipótesis nula y acepta la hipótesis alternativa de que hay un cambio estadísticamente significativo (p-value = 0.002) en la temperatura media entre el periodo 1997-2001 (14,45 ºC) y el periodo 2011-2015 (15,23 ºC). Se constata un incremento en la temperatura media con un intervalo de confianza entre 1.27 y 0.28 ºC.
+
+
+2. Si se compara la temperatura media de cada mes que hay en los dos periodos se obtiene los siguientes resultados
+
+```{r, warning=FALSE}
+
+# Se crea una matriz vacía donde se guardarán los resultados
+ch_matrix <- matrix(nc = 5, nr = 0)
+colnames(ch_matrix) <- c("month", "men_temp_1997-2001","men_temp_2011-2015" , "p-value", "h1")
+
+# Contraste de hipótesis para cada mes
+for (i in 1:12) {
+  ch <- t.test(Mean.TemperatureC ~ grupo, data = data_ch[data_ch$month == i,])
+  group1_mean = ch$estimate[1]
+  group2_mean = ch$estimate[2]
+  p_val = ch$p.value
+  h1 = if(ch$p.value < 0.05) {"aceptada"} else {"rechazada"}
+  
+  pair = matrix(ncol = 5, nrow = 1)
+  pair[1][1] = i
+  pair[2][1] = group1_mean
+  pair[3][1] = group2_mean
+  pair[4][1] = p_val
+  pair[5][1] = h1
+  
+  ch_matrix <- rbind(ch_matrix,pair)
+  
+}
+
+ch_matrix
+
+```
+
+A excepción del mes de enero, en el que la hipótesis nula es aceptada,  en los demás meses el test rechaza la hipótesis nula y acepta la hipótesis aternativa de que hay un cambio significativo en la temperatura media del mes. En los meses de febrero y marzo se produce una disminución de la temperatura media mientras que en los meses de abril a diciembre se produce un incremento en las temperaturas medias.
+
+
+**Representación gráfica**
+
+Una forma de visualizarlo es utilizando diagramas de caja y bigotes, en el que se comparan la distribución de la temperatura media diaria del periodo 1997-2001 (1, en azul) y el periodo 2011-2015 (2, en amarillo)
+
+```{r}
+boxplot(Mean.TemperatureC ~ grupo, 
+        data = data_ch,
+        col = (c("lightblue", "gold")),
+        main = "temperatura media diaria en cada periodo",
+        xlab = "Periodo",
+        ylab = "Grados Centígrados")
+
+boxplot(Mean.TemperatureC ~ grupo + month, 
+        data = data_ch[data_ch$month <= 6,],
+        col = (c("lightblue", "gold")),
+        main = "temperatura media diaria de cada mes (ene-Jun)",
+        xlab = "Periodo/mes",
+        ylab = "Grados Centígrados")
+
+boxplot(Mean.TemperatureC ~ grupo + month, 
+        data = data_ch[data_ch$month > 6,],
+        col = (c("lightblue", "gold")),
+        main = "temperatura media diaria de cada mes (Jul-Dic)",
+        xlab = "Periodo/mes",
+        ylab = "Grados Centígrados")
+
+```
+
+
+### 4.3.3 Análisis de tendencia de la temperatura media mensual 1997-2015
+
+Con los datasets mensuales y anuales generados en el apartado 4.1 se realiza un análisis de tendencias de la temperatura media, mínima y máxima para el periodo 1997-2015. Para determinar si existe una tendencia en las temperaturas de la serie histórica se ha utilizado el test de Mann-Kendall, un test no paramétrico que puede manejar patrones estacionales dentro de los datos.
+
+En primer lugar se va a descomponer la serie temporal en sus componentes constituyentes: El componente de tendencias, el componente aleatorio y el componente estacional.
+
+```{r message=FALSE, warning= FALSE}
+if(!require(mice)){install.packages("mice")}
+if(!require(Kendall)){install.packages("Kendall")}
+if(!require(trend)){install.packages("trend")}
+library(mice)
+library(Kendall)
+library(trend)
+
+# Se convierten los datos mensuales en un objeto de serie temporal ts
+TS_mean = ts(data_month$Mean.Temp_C, frequency = 12, start = c(1997,1))
+TS_min = ts(data_month$Min.Temp_C, frequency = 12, start = c(1997,1))
+TS_max = ts(data_month$Max.Temp_C, frequency = 12, start = c(1997,1))
+
+# Descomposición de los objetos de las series temporales
+plot(decompose(TS_mean)) # TEMPERATURA MEDIA MENSUAL
+plot(decompose(TS_min)) #  MEDIA DE LAS TEMPERATURA MÁXIMAS
+plot(decompose(TS_max)) #  MEDIA DE LAS TEMPERATURA MÁXIMAS
+
+```
+Si se observa el gráfico que muestra la tendencia (trend) se aprecia que en los primeros años de la serie hay un descenso de las temperaturas, para luego estabilizarse y fluctuar hasta que a partir de 2005 sigue una tendencia positiva con fluctuaciones. A la hora de interpretar los resultados del test hay que tener en cuenta que la tendencia es relativa a la ventana temporal que se analiza y no puede extrapolarse de manera alegre, sobre todo si el intervalo temporal es pequeño como el utilizado aquí (desde un punto de vista climático)
+
+
+el Test de Mann-Kendall da los siguientes resultados para medias anuales y mensuales
+
+```{r message=FALSE, warning= FALSE}
+
+# Test de Mann-Kendall de serie anual
+MK_mean_year = MannKendall(data_year$Mean.Temp_C)
+MK_min_year = MannKendall(data_year$Min.Temp_C)
+MK_max_year = MannKendall(data_year$Max.Temp_C)
+
+#Test de Mann-Kendall de serie estacional
+SMK_mean = SeasonalMannKendall(TS_mean)
+SMK_min = SeasonalMannKendall(TS_min)
+SMK_max = SeasonalMannKendall(TS_max)
+```
+
+```{r message=FALSE, warning= FALSE, echo=FALSE, eval=FALSE}
+# Resultados del test
+cat("Temperatura media:\n")
+cat("- Anual: ") 
+MK_mean_year
+cat("- Estacional: ") 
+SMK_mean
+
+cat("\nMedia de las Temperaturas Máximas:\n")
+cat("- Anual: ") 
+MK_max_year
+cat("- Estacional: ") 
+SMK_max
+
+cat("\nMedia de las Temperaturas Mínimas:\n")
+cat("- Anual: ") 
+MK_min_year
+cat("- Estacional: ") 
+SMK_min
+```
+Los resultados obtenidos con el test de Mann-Kendall son los siguientes:
+
+Temperatura media:
+* Anual: tau = 0.246, 2-sided pvalue =0.15121
+* Estacional: tau = 0.117, 2-sided pvalue =0.015335
+
+Media de las Temperaturas Máximas:
+* Anual: tau = 0.287, 2-sided pvalue =0.093092
+* Estacional: tau = 0.164, 2-sided pvalue =0.000713
+
+Media de las Temperaturas Mínimas:
+* Anual: tau = 0.0587, 2-sided pvalue =0.75271
+* Estacional: tau = 0.0327, 2-sided pvalue =0.49838
+
+En los datos de la serie de temperatura anual (media, mínimo y máximo) no se aprecia una clara tendencia para el periodo analizado, no es significativa, los p-valores son amyores al nivel de significación de 0.05.
+
+Por otra parte, si se observa una tendencia estacional significativa en la serie de temperaturas medias mensuales y en el de las máximas mensuales, no así en el de las mínimas.
+
+
+# 6. Conclusiones
+
+
+En los objetivos se plantean tres cuestiones a responder a partir de la serie de datos climáticos 1997-2015 de la estación metereológica del aeropuerto de Barajas:
+
+1. ***¿Qué factores climatológicos influyen más sobre la visibilidad y en qué sentido lo hace?*** Para responder a esta cuestión se ha llevado a cabo un análisis de correlación entre la variable visibilidad y las demás variables cuantitativas aplicando el coeficiente de correlación de pearson. Los resultados muestran que la variable más influyente es la humedad relativa, seguida de lejos por la temperatura y por el punto de rocío. Todas son estadísticamente significativas aunque los coeficientes no sean muy altos. La humedad relativa y el punto de rocío se correlaciona de forma negativa con la visibilidad, de tal manera que a mayor humedad relativa y mayor temperatura de rocío menor es la visibilidad. En cambio, la temperatura se correlaciona de manera positiva, cuanto mayor es la temperatura más se favorece la visibilidad.
+
+2. ***¿Se ha producido un cambio estadísticamente significativo en la temperatura media de los últimos 5 años repecto al del periodo 1997-2001?*** Para averiguarlo se ha realizado un test paramétrico de constraste de hipótesis para comprobar la igualdad de las temperaturas medias de ambos periodos. En este caso, se ha aplicado el test t-Student comparando tanto la temperatura media de ambos periodos como el de cada uno de los meses. Los resultados muestran que hay un aumento estadísticamente significativo en la temperatura media entre 1997-2001 y 2011-2015. Cuando se compara la temperatura media de cada mes, los meses de febrero y marzo muestra un descenso en la temperatura media entre ambos periodos mientras que en los meses que van de abril a diciembre se detecta un aumento en la tempertura medio, todos estadísticamente significativos. Solo en el mes de enero el cambio de la temepratura media no es significativo.
+
+3. ***¿Cuál ha sido la tendencia en la temperatura media, máxima y mínima anual y estacional para el periodo comprendido entre 1997 y 2015?*** Para responder a esta pregunta se ha hecho un análisis de tendencias utilizando el test de Mann-Kendall que permite separar la tendencia en las temperaturas de las fluctuaciones estacionales propias. los resultados no muestran una tendencia clara dentro de la ventana temporal analizada, las temperaturas anuales (media, maxima y mínima) no muestran tendencias significativas. En cambio, la media de las temperaturas máximas y las temperaturas medias estacionales si muestran una tendencia positiva estadisticamente significativa según el test.
+
+
+Los análisis llevados a cabo han respondido, en parte, a las cuestiones planteadas siendo una primera aproximación. Así, por ejemplo, el análisis de  correlación solo tiene en cuenta la influencia de las variables una a una y no en su conjunto. Habría que hacer análisis adicionales para ir más allá como un análisis de regresión múltiple. Los resultados del constraste de hipótesis y el análisis de tendencia para ver si hay cambios significativos en las temperaturas medias o una tendencia son muy dependientes de las ventanas temporales que se utilicen, por lo que sus conclusiones no se pueden generalizar. Se necesitan series temporales más largas para que sean representativas.
+
+
